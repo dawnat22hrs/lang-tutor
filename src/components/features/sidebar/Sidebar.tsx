@@ -134,7 +134,7 @@ const FORMATS = Object.values(SessionFormat);
 export const Sidebar = () => {
   const dispatch = useAppDispatch();
   const { profiles, activeLanguageId } = useAppSelector((s) => s.languages);
-  const { formatByLanguage } = useAppSelector((s) => s.chat);
+  const { formatByLanguage, streaming } = useAppSelector((s) => s.chat);
   const { sidebarOpen, progressRefreshKey } = useAppSelector((s) => s.ui);
   const [progress, setProgress] = useState<ProgressSummary | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -154,21 +154,6 @@ export const Sidebar = () => {
     dispatch(setSidebarOpen(false));
   };
 
-  const handleFormatChange = (format: SessionFormat) => {
-    if (!activeLanguageId) return;
-    if (format === activeFormat) {
-      dispatch(triggerContinue(activeLanguageId));
-    } else {
-      dispatch(setFormat({ languageId: activeLanguageId, format, autoStart: true }));
-    }
-  };
-
-  const handleDeleteConfirm = (id: string) => {
-    dispatch(removeLanguage(id));
-    dispatch(clearMessages(id));
-    setConfirmDeleteId(null);
-  };
-
   const injectLocalMessage = (content: string) => {
     if (!activeLanguageId) return;
     dispatch(addMessage({
@@ -181,6 +166,26 @@ export const Sidebar = () => {
         createdAt: new Date().toISOString(),
       },
     }));
+  };
+
+  const handleFormatChange = (format: SessionFormat) => {
+    if (!activeLanguageId) return;
+    if (format === SessionFormat.Review && format !== activeFormat && progress?.dueToday === 0) {
+      dispatch(setFormat({ languageId: activeLanguageId, format, autoStart: false }));
+      injectLocalMessage("На сегодня слов для повторения нет. Возвращайтесь завтра или выберите другой формат занятия.");
+      return;
+    }
+    if (format === activeFormat) {
+      dispatch(triggerContinue(activeLanguageId));
+    } else {
+      dispatch(setFormat({ languageId: activeLanguageId, format, autoStart: true }));
+    }
+  };
+
+  const handleDeleteConfirm = (id: string) => {
+    dispatch(removeLanguage(id));
+    dispatch(clearMessages(id));
+    setConfirmDeleteId(null);
   };
 
   const handleShowLearnedWords = async () => {
@@ -204,7 +209,7 @@ export const Sidebar = () => {
   };
 
   return (
-    <Aside $open={sidebarOpen}>
+    <Aside $open={sidebarOpen} style={streaming ? { pointerEvents: "none", opacity: 0.5 } : undefined}>
       <Section>
         <SectionLabel>{SIDEBAR.languages}</SectionLabel>
         {profiles.map((p) =>
@@ -287,30 +292,6 @@ export const Sidebar = () => {
             >
               <StatNumber>{progress.totalWords}</StatNumber>
               <StatLabel>{SIDEBAR.statsWords}</StatLabel>
-            </StatCard>
-            <StatCard
-              onClick={handleShowDueWords}
-              style={{ cursor: progress.dueToday > 0 ? "pointer" : "default" }}
-            >
-              <StatNumber
-                style={{
-                  color:
-                    progress.dueToday > 0
-                      ? theme.colors.brand
-                      : theme.colors.textPrimary,
-                }}
-              >
-                {progress.dueToday}
-              </StatNumber>
-              <StatLabel>{SIDEBAR.statsReview}</StatLabel>
-            </StatCard>
-            <StatCard>
-              <StatNumber>{progress.streakDays}</StatNumber>
-              <StatLabel>{SIDEBAR.statsDays}</StatLabel>
-            </StatCard>
-            <StatCard>
-              <StatNumber>{progress.totalSessions}</StatNumber>
-              <StatLabel>{SIDEBAR.statsSessions}</StatLabel>
             </StatCard>
           </StatGrid>
 

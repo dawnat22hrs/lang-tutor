@@ -1,9 +1,12 @@
 import OpenAI from "openai";
 import { NextRequest } from "next/server";
+
+export const dynamic = "force-dynamic";
 import {
   getProfile,
   getDueItems,
   reviewItem,
+  scheduleForToday,
   upsertVocabItem,
   getItemByWord,
   getItemById,
@@ -20,7 +23,7 @@ import { SessionFormat } from "@/types";
 import type { AIFeedback } from "@/types";
 
 const client = new OpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY,
+  apiKey: process.env.OPENROUTER_API_KEY ?? "build-placeholder",
   baseURL: "https://openrouter.ai/api/v1",
   defaultHeaders: {
     "HTTP-Referer": "http://localhost:3000",
@@ -105,80 +108,181 @@ export const POST = async (req: NextRequest): Promise<Response> => {
 
       const lastUserContent = messages[messages.length - 1]?.content ?? "";
       const isShortAnswer = lastUserContent.trim().split(/\s+/).length <= 3;
+      const isAICommand = (Object.values(AI_COMMANDS) as string[]).includes(lastUserContent);
 
-      while ((fbMatch = feedbackRegex.exec(fullText)) !== null) {
-        try {
-          const feedback: AIFeedback = JSON.parse(fbMatch[1]);
+      if (!isAICommand) {
+        while ((fbMatch = feedbackRegex.exec(fullText)) !== null) {
+          try {
+            const feedback: AIFeedback = JSON.parse(fbMatch[1]);
 
-          if (feedback.correct === false && feedback.score != null && feedback.score >= 7) {
-            feedback.score = 6;
-          }
+            if (feedback.correct === false && feedback.score != null && feedback.score >= 8) {
+              feedback.score = 7;
+            }
 
-          if (feedback.wordId != null && feedback.score != null && feedback.score >= 7 && isShortAnswer) {
-            const item = getItemById(feedback.wordId);
-            if (item) {
-              const dist = Math.min(
-                spellCheckScore(lastUserContent, item.word),
-                spellCheckScore(lastUserContent, item.translation)
-              );
-              if (dist > 1) {
-                feedback.score = 6;
-                feedback.correct = false;
+            if (feedback.wordId != null && feedback.score != null && feedback.score >= 8 && isShortAnswer) {
+              const item = getItemById(feedback.wordId);
+              if (item) {
+                const dist = Math.min(
+                  spellCheckScore(lastUserContent, item.word),
+                  spellCheckScore(lastUserContent, item.translation)
+                );
+                if (dist > 1) {
+                  feedback.score = 7;
+                  feedback.correct = false;
+                }
               }
             }
-          }
 
-          if (feedback.wordId != null && feedback.score != null) {
-            reviewItem(feedback.wordId, feedback.score);
-            incrementSession(sessionId, feedback.score);
-            scoredFeedback = feedback;
-          }
-
-          if (feedback.newWord) {
-            const existingWord = getItemByWord(languageId, feedback.newWord.word);
-            upsertVocabItem(
-              languageId,
-              feedback.newWord.word,
-              feedback.newWord.translation,
-              feedback.newWord.context
-            );
-
-            if (existingWord && feedback.score != null && feedback.score > 0 && feedback.wordId == null) {
-              reviewItem(existingWord.id, feedback.score);
+            if (feedback.wordId != null && feedback.score != null) {
+              reviewItem(feedback.wordId, feedback.score);
               incrementSession(sessionId, feedback.score);
-              scoredFeedback = { ...feedback, wordId: existingWord.id };
+              scoredFeedback = feedback;
             }
 
-            newWordFeedback = feedback;
-          }
+            if (feedback.newWord) {
+              const existingWord = getItemByWord(languageId, feedback.newWord.word);
+              upsertVocabItem(
+                languageId,
+                feedback.newWord.word,
+                feedback.newWord.translation,
+                feedback.newWord.context
+              );
 
-          if (
-            format === SessionFormat.Vocabulary &&
-            feedback.score != null && feedback.score > 0 &&
-            feedback.wordId == null && !feedback.newWord
-          ) {
-            const item = getLatestUnreviewedItem(languageId, newWordFeedback?.newWord?.word);
-            if (item) {
-              reviewItem(item.id, feedback.score);
-              incrementSession(sessionId, feedback.score);
-              scoredFeedback = { ...feedback, wordId: item.id };
+              if (existingWord && feedback.score != null && feedback.score > 0 && feedback.wordId == null) {
+                reviewItem(existingWord.id, feedback.score);
+                incrementSession(sessionId, feedback.score);
+                scoredFeedback = { ...feedback, wordId: existingWord.id };
+              }
+
+              newWordFeedback = feedback;
             }
+
+            if (
+              format === SessionFormat.Vocabulary &&
+              feedback.score != null && feedback.score >= 8 &&
+              feedback.wordId == null && !feedback.newWord
+            ) {
+              const stopWords = new Set(["the", "a", "an", "to"]);
+              const currentItem = getLatestUnreviewedItem(languageId, newWordFeedback?.newWord?.word);
+              if (currentItem) {
+                const contentWords = currentItem.word.toLowerCase().split(/\s+/).filter(w => !stopWords.has(w));
+                const keyWord = contentWords.length > 0
+                  ? contentWords.reduce((a, b) => a.length >= b.length ? a : b)
+                  : currentItem.word.toLowerCase();
+                if (spellCheckScore(lastUserContent, keyWord) > 1) {
+                  feedback.score = 7;
+                  feedback.correct = false;
+                }
+              }
+            }
+
+            if (
+              format === SessionFormat.Vocabulary &&
+              feedback.score != null && feedback.score > 0 &&
+              feedback.wordId == null && !feedback.newWord
+            ) {
+              const item = getLatestUnreviewedItem(languageId, newWordFeedback?.newWord?.word);
+              if (item) {
+                reviewItem(item.id, feedback.score);
+                incrementSession(sessionId, feedback.score);
+                scoredFeedback = { ...feedback, wordId: item.id };
+              }
+            }
+
+            if (
+              format === SessionFormat.Review &&
+              feedback.score != null && feedback.score > 0 &&
+              feedback.wordId == null
+            ) {
+              const matched = isShortAnswer
+                ? dueItems.find((di) => {
+                    const dist = Math.min(
+                      spellCheckScore(lastUserContent, di.word),
+                      spellCheckScore(lastUserContent, di.translation)
+                    );
+                    return dist <= 2;
+                  })
+                : null;
+              const item = matched ?? dueItems[0] ?? null;
+              if (item) {
+                if (feedback.score >= 8 && isShortAnswer) {
+                  const dist = Math.min(
+                    spellCheckScore(lastUserContent, item.word),
+                    spellCheckScore(lastUserContent, item.translation)
+                  );
+                  if (dist > 1) {
+                    feedback.score = 7;
+                    feedback.correct = false;
+                  }
+                }
+                reviewItem(item.id, feedback.score);
+                incrementSession(sessionId, feedback.score);
+                scoredFeedback = { ...feedback, wordId: item.id };
+              }
+            }
+          } catch (e) {
+            console.error("Failed to parse feedback:", e);
           }
-        } catch (e) {
-          console.error("Failed to parse feedback:", e);
         }
       }
 
-      const isAICommand = (Object.values(AI_COMMANDS) as string[]).includes(lastUserContent);
       if (format === SessionFormat.Vocabulary && !scoredFeedback && !isAICommand) {
         const excludeWord = newWordFeedback?.newWord?.word;
-        const score = newWordFeedback?.score ?? 7;
+        const scoreMatch = fullText.match(/(?:оценка|score)[:\s]*(\d+)/i);
+        let score = scoreMatch
+          ? Math.min(10, Math.max(1, parseInt(scoreMatch[1])))
+          : (newWordFeedback?.score ?? 8);
         const item = getLatestUnreviewedItem(languageId, excludeWord);
         if (item) {
+          if (score >= 8) {
+            const stopWords = new Set(["the", "a", "an", "to"]);
+            const contentWords = item.word.toLowerCase().split(/\s+/).filter(w => !stopWords.has(w));
+            const keyWord = contentWords.length > 0
+              ? contentWords.reduce((a, b) => a.length >= b.length ? a : b)
+              : item.word.toLowerCase();
+            if (spellCheckScore(lastUserContent, keyWord) > 1) {
+              score = 7;
+            }
+          }
           reviewItem(item.id, score);
           incrementSession(sessionId, score);
-          scoredFeedback = { score, wordId: item.id, correct: newWordFeedback?.correct ?? true };
+          scoredFeedback = { score, wordId: item.id, correct: score >= 8 };
         }
+      }
+
+      if (format === SessionFormat.Review && !scoredFeedback && !isAICommand) {
+        const matched = isShortAnswer
+          ? dueItems.find((di) =>
+              Math.min(
+                spellCheckScore(lastUserContent, di.word),
+                spellCheckScore(lastUserContent, di.translation)
+              ) <= 2
+            )
+          : null;
+        const item = matched ?? dueItems[0] ?? null;
+        if (item) {
+          const scoreMatch = fullText.match(/(?:оценка|score)[:\s]*(\d+)/i);
+          let score = scoreMatch ? Math.min(10, Math.max(1, parseInt(scoreMatch[1]))) : 8;
+          if (score >= 8 && isShortAnswer) {
+            const dist = Math.min(
+              spellCheckScore(lastUserContent, item.word),
+              spellCheckScore(lastUserContent, item.translation)
+            );
+            if (dist > 1) score = 7;
+          }
+          reviewItem(item.id, score);
+          incrementSession(sessionId, score);
+          scoredFeedback = { score, wordId: item.id, correct: score >= 8 };
+        }
+      }
+
+      if (
+        format === SessionFormat.Vocabulary &&
+        scoredFeedback?.wordId != null &&
+        scoredFeedback.score != null &&
+        scoredFeedback.score < 8
+      ) {
+        scheduleForToday(scoredFeedback.wordId);
       }
 
       if (scoredFeedback || newWordFeedback) {

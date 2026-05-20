@@ -12,6 +12,7 @@ import {
   initLanguage,
   setFormat,
   clearPendingStart,
+  setLastGreetedDate,
 } from "@/store/slices/chatSlice";
 import { invalidateProgress } from "@/store/slices/uiSlice";
 import { theme } from "@/styles/theme";
@@ -58,7 +59,7 @@ const SendButton = styled(Button)`
 export const Chat = () => {
   const dispatch = useAppDispatch();
   const { profiles, activeLanguageId } = useAppSelector((s) => s.languages);
-  const { messagesByLanguage, sessionIdByLanguage, formatByLanguage, streaming, pendingStart, pendingStartFresh } =
+  const { messagesByLanguage, sessionIdByLanguage, formatByLanguage, lastGreetedDateByLanguage, streaming, pendingStart, pendingStartFresh } =
     useAppSelector((s) => s.chat);
   const { progressRefreshKey } = useAppSelector((s) => s.ui);
 
@@ -147,8 +148,8 @@ export const Chat = () => {
     [activeLanguageId, format, messagesByLanguage, sessionId, dispatch]
   );
 
-  const latestRef = useRef({ formatByLanguage, messagesByLanguage, pendingStartFresh, sendMessage });
-  latestRef.current = { formatByLanguage, messagesByLanguage, pendingStartFresh, sendMessage };
+  const latestRef = useRef({ formatByLanguage, messagesByLanguage, pendingStartFresh, lastGreetedDateByLanguage, sendMessage });
+  latestRef.current = { formatByLanguage, messagesByLanguage, pendingStartFresh, lastGreetedDateByLanguage, sendMessage };
 
   useEffect(() => {
     if (!activeLanguageId) return;
@@ -168,16 +169,20 @@ export const Chat = () => {
     if (!activeLanguageId || pendingStart !== activeLanguageId) return;
     dispatch(clearPendingStart());
 
-    const { formatByLanguage: fbL, messagesByLanguage: mbL, pendingStartFresh: psf, sendMessage: sm } = latestRef.current;
+    const { formatByLanguage: fbL, messagesByLanguage: mbL, pendingStartFresh: psf, lastGreetedDateByLanguage: lgd, sendMessage: sm } = latestRef.current;
     const currentFormat = fbL[activeLanguageId] ?? SessionFormat.Review;
     const existing: ChatMessage[] = mbL[activeLanguageId] ?? [];
     const hasMessages = existing.length > 0;
 
+    const today = new Date().toISOString().split("T")[0];
+    const greetedToday = lgd[activeLanguageId] === today;
+
     let command: string;
     let freshStart: boolean;
-    if (!hasMessages) {
+    if (!hasMessages || (psf && !greetedToday)) {
       command = AI_COMMANDS.startLesson;
-      freshStart = false;
+      freshStart = hasMessages;
+      dispatch(setLastGreetedDate({ languageId: activeLanguageId, date: today }));
     } else if (psf) {
       command = AI_COMMANDS.switchFormat;
       freshStart = true;

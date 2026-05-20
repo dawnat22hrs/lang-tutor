@@ -6,6 +6,7 @@ export interface ChatState {
   messagesByLanguage: Record<string, ChatMessage[]>;
   sessionIdByLanguage: Record<string, number>;
   formatByLanguage: Record<string, SessionFormat>;
+  lastGreetedDateByLanguage: Record<string, string>;
   streaming: boolean;
   pendingStart: string | null;
   pendingStartFresh: boolean;
@@ -15,6 +16,7 @@ const initialState: ChatState = {
   messagesByLanguage: {},
   sessionIdByLanguage: {},
   formatByLanguage: {},
+  lastGreetedDateByLanguage: {},
   streaming: false,
   pendingStart: null,
   pendingStartFresh: true,
@@ -107,10 +109,22 @@ const chatSlice = createSlice({
       state.streaming = action.payload;
     },
 
+    setLastGreetedDate(
+      state,
+      action: PayloadAction<{ languageId: string; date: string }>
+    ) {
+      state.lastGreetedDateByLanguage[action.payload.languageId] = action.payload.date;
+    },
+
+    clearLanguageMessages(state, action: PayloadAction<string>) {
+      state.messagesByLanguage[action.payload] = [];
+    },
+
     clearMessages(state, action: PayloadAction<string>) {
       delete state.messagesByLanguage[action.payload];
       delete state.sessionIdByLanguage[action.payload];
       delete state.formatByLanguage[action.payload];
+      delete state.lastGreetedDateByLanguage[action.payload];
     },
   },
 });
@@ -125,6 +139,8 @@ export const {
   attachFeedback,
   setSessionId,
   setStreaming,
+  setLastGreetedDate,
+  clearLanguageMessages,
   clearMessages,
 } = chatSlice.actions;
 export default chatSlice.reducer;

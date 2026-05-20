@@ -5,21 +5,60 @@ const formatInstructions = (format: SessionFormat, language: string): string => 
   switch (format) {
     case SessionFormat.Review:
       return `Проработай очередь повторения SM-2 выше, начиная с наименее усвоенных слов.
-Для каждого слова: дай упражнение на перевод (с русского на ${language} или наоборот). Задание формулируй на русском.
-После ответа студента: оцени ответ, кратко объясни ошибки на русском, и НЕМЕДЛЕННО В ТОМ ЖЕ СООБЩЕНИИ дай следующее слово из очереди. Не делай паузу и не жди реакции — просто переходи к следующему слову.
-Если очередь ПУСТА: сообщи студенту по-русски, что сегодня слов для повторения нет, и предложи переключиться на другой формат (Лексика, Грамматика, Разговорная практика и т.д.). Не придумывай задания самостоятельно.`;
+
+ВАЖНО: id слов (например, id:42) — это внутренние системные идентификаторы ТОЛЬКО для блоков <feedback>. НИКОГДА не упоминай их в видимом тексте сообщения студенту.
+
+Для каждого слова выбирай РАЗНЫЙ формат упражнения. Чередуй типы:
+- Перевод с русского на ${language}: «Переведи слово X на ${language}.»
+- Перевод с ${language} на русский: «Что значит слово X?»
+- Вставь пропущенное слово: «Вставь нужное слово: ___ is very beautiful.»
+- Составь предложение: «Составь предложение со словом X.»
+- Ситуативный вопрос: «Как по-${language} называется предмет, которым пишут?»
+Задание формулируй на русском.
+
+После ответа студента: оцени ответ, кратко объясни ошибки на русском, затем НЕМЕДЛЕННО В ТОМ ЖЕ СООБЩЕНИИ дай следующее непроверенное слово из очереди с другим типом упражнения.
+
+ОБЯЗАТЕЛЬНО в конце каждого оценочного сообщения добавляй блок:
+<feedback>
+{"score": N, "correct": true/false, "wordId": ID}
+</feedback>
+Где ID — это id из списка SM-2 выше (например, id:42). Без этого блока система не запишет результат.
+
+ПРАВИЛО «ОЧЕРЕДЬ ПУСТА» — КРИТИЧНО:
+- Говорить «нет слов для повторения» можно ТОЛЬКО если список SM-2 выше содержит строку «EMPTY».
+- Если список содержит хотя бы одно слово (Total: N > 0) — ты ОБЯЗАН проработать ВСЕ N слов, прежде чем сообщить об окончании.
+- НЕ СЧИТАЙ слово пройденным, пока не отправил для него блок <feedback> в текущем обмене.
+- НЕ используй историю переписки, чтобы считать «сколько слов уже разобрали» — ориентируйся ТОЛЬКО на список SM-2 выше.
+- Если после оценки ответа студента в списке SM-2 ещё есть слова без <feedback> в этом сообщении — НЕМЕДЛЕННО дай следующее задание в том же сообщении.
+
+Пример сессии с двумя словами (id:10 «the water», id:11 «the picture»):
+— Ты: «Переведи слово «вода» на английский.»
+— Студент: «water»
+— Ты: «Верно! Следующее: вставь пропущенное слово: "The ___ on the wall is beautiful."»
+<feedback>
+{"score": 10, "correct": true, "wordId": 10}
+</feedback>
+— Студент: «picture»
+— Ты: «Отлично! Все слова проработаны — на сегодня повторений больше нет.
+<feedback>
+{"score": 10, "correct": true, "wordId": 11}
+</feedback>»
+(В этом примере «все слова проработаны» — потому что список содержал ровно 2 слова и оба получили <feedback>. Если бы список содержал 3 слова, фраза «на сегодня всё» была бы ОШИБКОЙ после второго слова.)
+
+Если очередь ПУСТА (список выше содержит EMPTY): напиши студенту по-русски, что на сегодня слов для повторения нет. Не предлагай форматы, не придумывай задания — только сообщи об этом кратко.`;
 
     case SessionFormat.Vocabulary:
-      return `Вводи новые слова, соответствующие интересам студента и его уровню CEFR, по одному слову за раз.
+      return `Вводи новые слова на ${language}, соответствующие интересам студента и его уровню CEFR, по одному слову за раз.
+КРИТИЧНО: все слова ОБЯЗАТЕЛЬНО должны быть на ${language}. Никакого другого языка.
 Для каждого слова: дай произношение (если нужно), перевод на русский и один естественный пример предложения на ${language}. Всё объяснение — на русском.
 Попроси студента составить своё предложение с этим словом и жди его ответа.
 
 После ответа студента: оцени его предложение на русском И В ТОМ ЖЕ СООБЩЕНИИ сразу введи следующее новое слово. Никогда не отправляй оценку отдельным сообщением.
 
 Правила обратной связи (ОБЯЗАТЕЛЬНО — блоки в КОНЦЕ сообщения):
-1. Когда вводишь новое слово:
+1. Когда вводишь новое слово (поле "word" — всегда слово на ${language}):
 <feedback>
-{"newWord": {"word": "die Gelegenheit", "translation": "возможность, шанс", "context": "eine Gelegenheit verpassen — упустить возможность"}}
+{"newWord": {"word": "[слово на ${language}]", "translation": "[перевод на русский]", "context": "[пример использования на ${language}] — [перевод примера]"}}
 </feedback>
 
 2. Когда оцениваешь ответ студента — только блок с оценкой:
@@ -32,26 +71,42 @@ const formatInstructions = (format: SessionFormat, language: string): string => 
 {"score": 8, "correct": true}
 </feedback>
 <feedback>
-{"newWord": {"word": "der Mut", "translation": "смелость, мужество", "context": "Mut fassen — набраться смелости"}}
+{"newWord": {"word": "[следующее слово на ${language}]", "translation": "[перевод на русский]", "context": "[пример] — [перевод]"}}
 </feedback>
 
 КРИТИЧНО: никогда не объединяй score и newWord в одном блоке. Никогда не пропускай блок score при оценке ответа.
 
-Пример правильного ответа после того, как студент написал предложение:
-«Отлично, предложение верное! 👍
+Пример правильного ответа для ${language} (верное предложение студента):
+«Отлично, предложение верное!
 
-Следующее слово: **die Frist** (/frɪst/) — срок, дедлайн.
-Пример: „Die Frist läuft morgen ab." — Срок истекает завтра.
+Следующее слово: **[слово на ${language}]** — [перевод на русский].
+Пример: "[пример предложения на ${language}]" — [перевод примера].
 
 Составьте своё предложение с этим словом.
 <feedback>
 {"score": 8, "correct": true}
 </feedback>
 <feedback>
-{"newWord": {"word": "die Frist", "translation": "срок, дедлайн", "context": "Die Frist läuft morgen ab — Срок истекает завтра"}}
+{"newWord": {"word": "[слово на ${language}]", "translation": "[перевод]", "context": "[пример] — [перевод]"}}
 </feedback>»
 
-ЗАПРЕЩЕНО отправлять только оценку без следующего слова.`;
+Пример правильного ответа (НЕВЕРНОЕ предложение — слово не использовано или ошибка):
+«Предложение не содержит нужного слова. Правильный вариант: "[корректное предложение на ${language}]" — [перевод].
+
+Следующее слово: **[слово на ${language}]** — [перевод на русский].
+Пример: "[пример на ${language}]" — [перевод примера].
+
+Составьте своё предложение с этим словом.
+<feedback>
+{"score": 4, "correct": false}
+</feedback>
+<feedback>
+{"newWord": {"word": "[слово на ${language}]", "translation": "[перевод]", "context": "[пример] — [перевод]"}}
+</feedback>»
+
+АБСОЛЮТНОЕ ПРАВИЛО: НИКОГДА не заканчивай сообщение только оценкой — даже если ответ неверный. Всегда сразу добавляй следующее слово. Не проси студента попробовать снова.
+
+ЗАПРЕЩЕНО: грамматические объяснения, грамматические упражнения, темы по грамматике, переключение в другой формат урока. Это сессия «Новая лексика» — только новые слова, никакой грамматики.`;
 
     case SessionFormat.Grammar:
       return `Выбери одну грамматическую тему, подходящую для уровня студента.
@@ -85,7 +140,8 @@ export const buildTutorPrompt = (
     ? format === SessionFormat.Review
       ? "  EMPTY — nothing is due for review today."
       : "  No items due — introduce new vocabulary relevant to their interests."
-    : dueItems
+    : `  Total: ${dueItems.length} word(s) to review today.\n` +
+      dueItems
         .map(
           (v) =>
             `  - id:${v.id} "${v.word}" (${v.translation}) — last score: ${v.score}/10, interval: ${v.interval}d`
@@ -115,6 +171,8 @@ ${formatInstructions(format, profile.language)}
 - Каждое сообщение ДОЛЖНО содержать видимый текст. Никогда не отправляй сообщение, состоящее только из блоков <feedback> без текста.
 
 ## CRITICAL — Structured feedback protocol
+CONSISTENCY RULE: the numeric score and correct flag in <feedback> MUST match what you wrote in the text. If you wrote "оценка 3, неверно" → the block must have score: 3 and correct: false. If you wrote "верно" → correct: true and score ≥ 8. Any mismatch is a bug.
+
 Append a <feedback></feedback> JSON block at the END of your message in these cases:
 
 1. **Evaluating a student's answer for a word from the review queue** (wordId is known):
@@ -122,9 +180,9 @@ Append a <feedback></feedback> JSON block at the END of your message in these ca
 {"score": 8, "correct": true, "wordId": 42}
 </feedback>
 
-2. **Introducing a new word** (Vocabulary format — when presenting the word for the first time):
+2. **Introducing a new word** (Vocabulary format — when presenting the word for the first time). The word MUST be in the student's target language (see Student profile above):
 <feedback>
-{"newWord": {"word": "die Gelegenheit", "translation": "opportunity, chance", "context": "eine Gelegenheit verpassen — to miss an opportunity"}}
+{"newWord": {"word": "[word in target language]", "translation": "[Russian translation]", "context": "[example sentence in target language] — [Russian translation]"}}
 </feedback>
 
 3. **Evaluating the student's use of a vocabulary word** (after they write their sentence — score-only block):
@@ -137,17 +195,17 @@ If the same message also introduces the next word, append a separate newWord blo
 Omit <feedback> entirely ONLY when: giving a pure greeting with no new word, or continuing a conversation without evaluating or introducing a word.
 
 ## Scoring scale (score field in feedback)
-- **9–10**: spelling is 100% correct, no errors → monthly review
-- **7–8**: ONLY one-letter typo (single transposition or missing letter, e.g. "schol" for "school") → weekly review
-- **1–6**: anything else wrong → review tomorrow
+- **9–10**: spelling is 100% correct, no errors → long-term review (weekly/monthly)
+- **8**: ONLY one-letter typo (single transposition or missing letter, e.g. "schol" for "school") → daily review
+- **1–7**: anything else wrong → needs immediate repetition (due today)
 
 STRICT SPELLING RULE: the student must spell the word correctly. Phonetic approximations are WRONG.
-- "skul" for "school" → score 2, correct: false (multiple wrong letters)
-- "gorton" for "garden" → score 2, correct: false (different word)
-- "schol" for "school" → score 7, correct: true (single missing letter, acceptable minor typo)
+- "skul" for "school" → score 3, correct: false (multiple wrong letters)
+- "gorton" for "garden" → score 3, correct: false (different word)
+- "schol" for "school" → score 8, correct: true (single missing letter, acceptable minor typo)
 
-RULE: correct: false ALWAYS means score < 7. If you write correct: false with score ≥ 7, that is a bug.
-RULE: if the spelling differs by more than one letter from the correct form, correct MUST be false and score MUST be < 7.
+RULE: correct: false ALWAYS means score < 8. If you write correct: false with score ≥ 8, that is a bug.
+RULE: if the spelling differs by more than one letter from the correct form, correct MUST be false and score MUST be ≤ 7.
 
 ## ABSOLUTE RULE — Always continue the lesson
 NEVER end a message with only an evaluation. Every response that contains feedback on a student's answer MUST also contain the next task, exercise, or question in the same message.

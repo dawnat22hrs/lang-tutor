@@ -14,7 +14,9 @@ const client = axios.create({
 });
 
 export const getProgress = async (languageId: string): Promise<ProgressSummary> => {
-  const { data } = await client.get<ProgressSummary>(`/api/progress/${languageId}`);
+  const { data } = await client.get<ProgressSummary>(`/api/progress/${languageId}`, {
+    params: { _t: Date.now() },
+  });
   return data;
 };
 

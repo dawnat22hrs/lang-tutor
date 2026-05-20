@@ -1,10 +1,12 @@
 import OpenAI from "openai";
 import { NextRequest } from "next/server";
+
+export const dynamic = "force-dynamic";
 import { buildPlacementPrompt } from "@/lib/prompts";
 import { placementTestSchema } from "@/lib/schemas";
 
 const client = new OpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY,
+  apiKey: process.env.OPENROUTER_API_KEY ?? "build-placeholder",
   baseURL: "https://openrouter.ai/api/v1",
   defaultHeaders: {
     "HTTP-Referer": "http://localhost:3000",

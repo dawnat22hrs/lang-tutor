@@ -10,12 +10,12 @@ export const sm2 = (
   repetitions: number,
   rawScore: number
 ): SM2Result => {
-  if (rawScore < 7) {
+  if (rawScore < 8) {
     return { easeFactor: Math.max(1.3, easeFactor - 0.2), interval: 1, repetitions: 0 };
   }
 
   const newRepetitions = repetitions + 1;
-  const efDelta = rawScore >= 10 ? 0.15 : rawScore >= 9 ? 0.1 : rawScore >= 8 ? 0.05 : 0;
+  const efDelta = rawScore >= 10 ? 0.15 : rawScore >= 9 ? 0.1 : 0.05;
   const newEaseFactor = Math.max(1.3, Math.min(2.5, easeFactor + efDelta));
 
   let newInterval: number;

@@ -90,25 +90,26 @@ export const MessageBubble = ({ message, isStreaming }: Props) => {
     );
   }
 
+  // Don't render empty assistant bubbles after streaming is done
   if (message.role === MessageRole.Assistant && !message.content && !isStreaming) {
     return null;
   }
 
   return (
   <Wrapper $role={message.role}>
-    <Bubble
-      $role={message.role}
-      dangerouslySetInnerHTML={{
-        __html: formatText(message.content),
-      }}
-    />
-
-    {isStreaming && message.role === MessageRole.Assistant && !message.content && (
+    {isStreaming && message.role === MessageRole.Assistant && !message.content ? (
       <Bubble $role={MessageRole.Assistant}>
         <LoadingDots>
           <span />
         </LoadingDots>
       </Bubble>
+    ) : (
+      <Bubble
+        $role={message.role}
+        dangerouslySetInnerHTML={{
+          __html: formatText(message.content),
+        }}
+      />
     )}
 
     {message.feedback?.score != null && (

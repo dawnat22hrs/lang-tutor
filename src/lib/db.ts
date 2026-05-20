@@ -250,6 +250,12 @@ export const getLatestUnreviewedItem = (
   return row ? mapItem(row) : null;
 };
 
+export const scheduleForToday = (id: number): void => {
+  getDb()
+    .prepare("UPDATE vocabulary_items SET next_review = date('now') WHERE id = ?")
+    .run(id);
+};
+
 export const reviewItem = (id: number, score: number): VocabularyItem => {
   const db = getDb();
   const item = db
